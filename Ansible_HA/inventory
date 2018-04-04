@@ -1,6 +1,0 @@
-ha_cluster_master_host  ansible_host=22.242.116.40  ansible_connection=ssh ansible_user=root ansible_ssh_pass=Password1
-ha_cluster_slave_host  ansible_host=22.242.116.69  ansible_connection=ssh ansible_user=root ansible_ssh_pass=Password1
-
-[ha_hosts]
-ha_cluster_master_host
-ha_cluster_slave_host
