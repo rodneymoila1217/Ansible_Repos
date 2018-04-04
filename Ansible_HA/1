@@ -1,0 +1,148 @@
+# Postgresql Tasks
+---
+
+- name: Test the ready state of the DB server
+  command: psql -c "\l"
+  become: yes
+  become_user: postgres
+  register: cmd_out
+
+- name: Ensure that Ansible DB is Installed
+  fail: msg="Ansible database Not found, can't carry ON! Install Ansible DB and try again"
+  failed_when: "'ansible' not in  cmd_out.stdout"
+
+# Master Server Configuration
+
+- name: Configure /var/lib/pgsql/9.6/data/postgresql.conf
+  template: 
+    src: defaults/templates/postgresql.conf
+    dest: /var/lib/pgsql/9.6/data/
+    owner: postgres
+    group: postgres
+    mode: 0600
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == master_ip
+
+- name: Create the archive directory and must be owned by Postgres
+  file:
+    path: /var/lib/pgsql/9.6/archive
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: 0600
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == master_ip
+
+- name: Configure /var/lib/pgsql/9.6/data/pg_hba.conf
+  template:
+    src: defaults/templates/pg_hba.conf
+    dest: /var/lib/pgsql/9.6/data/
+    owner: postgres
+    group: postgres
+    mode: 0600
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == master_ip
+
+- name: Create the replica User
+  command: psql -c "create user replica replication;"
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == master_ip
+  become: yes
+  become_user: postgres
+  ignore_errors: yes
+
+- name: Restart and check the PostgreSQL service.
+  service:
+    name: postgresql-9.6
+    state: restarted
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == master_ip
+
+# Slave Server Configuration
+
+- name: slave stat data
+  stat: path=/var/lib/pgsql/9.6/data
+  register: data_stat
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip
+
+- debug:
+    msg: "Path exists and is a directory"
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip  and data_stat.stat.isdir is defined and
+        data_stat.stat.isdir    
+
+
+- name: Move data to data_old
+  command: mv /var/lib/pgsql/9.6/data  /var/lib/pgsql/9.6/data_old
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip  and data_stat.stat.isdir is defined
+  ignore_errors: yes
+
+- name: Initialize the DB
+  command: /usr/pgsql-9.6/bin/postgresql96-setup initdb
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip  and data_stat.stat.isdir is not defined
+  ignore_errors: yes
+
+- name: Restart and check the PostgreSQL service.
+  service:
+    name: postgresql-9.6.service
+    state: restarted
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip and data_stat.stat.isdir is defined
+
+
+
+- name: retrying data directory check...
+  stat: path=/var/lib/pgsql/9.6/data
+  register: data_stat
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip
+
+- debug:
+    msg: "Path exists and is a directory"
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip  and data_stat.stat.isdir is defined and
+        data_stat.stat.isdir
+
+- name: Move data to data_old
+  command: mv /var/lib/pgsql/9.6/data  /var/lib/pgsql/9.6/data_old
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip  and data_stat.stat.isdir is defined
+ 
+
+- name: Create the archive directory and must be owned by Postgres
+  file:
+    path: /var/lib/pgsql/9.6/archive
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: 0700
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip
+
+- name: create base backup
+  command: pg_basebackup -h {{ master_ip }} -U replica -D /var/lib/pgsql/9.6/data -P --xlog
+  become: yes
+  become_user: postgres
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip
+
+- name: Configure /var/lib/pgsql/9.6/data/recovery.conf
+  template:
+    src: defaults/templates/recovery.conf
+    dest: /var/lib/pgsql/9.6/data/
+    owner: postgres
+    group: postgres
+    mode: 0600
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip
+
+- name: Restart and check the PostgreSQL service.
+  service:
+    name: postgresql-9.6.service
+    state: restarted
+  when: ansible_distribution == "RedHat" and ansible_distribution_version == "7.4" and
+        ansible_default_ipv4.address == slave_ip
+

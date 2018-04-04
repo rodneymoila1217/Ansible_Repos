@@ -1,0 +1,7 @@
+# postgresql_ha playbook.yml
+---
+- name: ha plabook
+  hosts: ha_hosts
+  gather_facts: True
+  roles:
+  - postgresql_ha
